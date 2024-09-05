@@ -1,19 +1,19 @@
-on: [push]
-
 name: Build theme
+
+on: [push]
 
 jobs:
   build-theme:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     name: Build theme package
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
-      - name: Use Node.js 10
-        uses: actions/setup-node@v2
+      - name: Use Node.js
+        uses: actions/setup-node@v3
         with:
-          node-version: '10'
+          node-version: '16'
 
       - name: Build and package
         id: build_and_package
@@ -22,14 +22,13 @@ jobs:
           npm run pretest
           npm run test
           npm run package
-          echo "::set-output name=asset_name::$(ls -1 jsonresume-theme-helloquan-*.tgz)"
+          echo "asset_name=$(ls -1 jsonresume-theme-helloquan-*.tgz)" >> $GITHUB_OUTPUT
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: theme-artifacts
-          path: |
-            ${{ steps.build_and_package.outputs.asset_name }}
+          path: ${{ steps.build_and_package.outputs.asset_name }}
 
       - name: Prepare public directory
         run: |
@@ -37,7 +36,7 @@ jobs:
           cp test/resume.html public/index.html
 
       - name: Deploy to GitHub Pages
-        uses: crazy-max/ghaction-github-pages@v2
+        uses: crazy-max/ghaction-github-pages@v3
         with:
           target_branch: gh-pages
           build_dir: public
@@ -45,38 +44,28 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release-theme:
-    if: ${{ contains(github.ref, 'refs/tags/') }}
+    if: startsWith(github.ref, 'refs/tags/')
     needs: build-theme
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     name: Release and publish theme
+    permissions:
+      contents: write
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: theme-artifacts
 
       - name: Get asset name
         id: get_asset_name
-        run: |
-          echo "::set-output name=asset_name::$(ls -1 jsonresume-theme-helloquan-*.tgz)"
+        run: echo "asset_name=$(ls -1 jsonresume-theme-helloquan-*.tgz)" >> $GITHUB_OUTPUT
 
       - name: Create release
         id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          files: ${{ steps.get_asset_name.outputs.asset_name }}
           draft: false
           prerelease: false
-
-      - name: Upload release asset
-        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./${{ steps.get_asset_name.outputs.asset_name }}
-          asset_name: ${{ steps.get_asset_name.outputs.asset_name }}
-          asset_content_type: application/zip
